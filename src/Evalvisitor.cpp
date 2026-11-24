@@ -332,25 +332,119 @@ std::any EvalVisitor::visitTest(Python3Parser::TestContext *context)  {
 
 // }
 
-// 还要比较字符串和浮点数
+bool compareValues(const std::any& left, const std::any& right, const std::string& op) {
+    // op：'<' | '>' | '==' | '>=' | '<=' | '!=';
+    bool leftNone = std::any_cast<None>(&left) != nullptr;
+    bool rightNone = std::any_cast<None>(&right) != nullptr;
+
+    if (leftNone || rightNone) {
+        if (op == "==") {
+            return (leftNone && rightNone);
+        }
+        else {
+            return false;
+        }
+    }
+
+    if (auto *leftStr = std::any_cast<std::string>(&left)) {
+        if (auto *rightStr = std::any_cast<std::string>(&right)) {
+            if (op == "<") {
+                return static_cast<bool>(*leftStr < *rightStr);
+            }
+            if (op == ">") {
+                return static_cast<bool>(*leftStr > *rightStr);
+            }
+            if (op == "==") {
+                return static_cast<bool>(*leftStr == *rightStr);
+            }
+            if (op == ">=") {
+                return static_cast<bool>(*leftStr >= *rightStr);
+            }
+            if (op == "<=") {
+                return static_cast<bool>(*leftStr <= *rightStr);
+            }
+            if (op == "!=") {
+                return static_cast<bool>(*leftStr != *rightStr);
+            }
+        }
+        else {
+            // "1" == 1
+            return false;
+        }
+    }
+    // 1 == "1"
+    if (auto *rightStr = std::any_cast<std::string>(&right)) {
+        return false;
+    }
+    std::any a = left;
+    std::any b = right;
+    if (a.type() == typeid(bool)) {
+        bool flag = std::any_cast<bool>(a);
+        a = int2048(flag ? 1LL : 0LL);
+    }
+    if (b.type() == typeid(bool)) {
+        bool flag = std::any_cast<bool>(b);
+        b = int2048(flag ? 1LL : 0LL);
+    }
+    if (a.type() == typeid(double) || b.type() == typeid(double)) {
+        double x, y;
+        if (a.type() == typeid(double)) x = std::any_cast<double>(a);
+        else x = int2048ToDouble(std::any_cast<int2048>(a));
+        if (b.type() == typeid(double)) y = std::any_cast<double>(b);
+        else y = int2048ToDouble(std::any_cast<int2048>(b));
+        if (op == "<") {
+            return static_cast<bool>(x < y);
+        }
+        if (op == ">") {
+            return static_cast<bool>(x > y);
+        }
+        if (op == "==") {
+            return static_cast<bool>(x == y);
+        }
+        if (op == ">=") {
+            return static_cast<bool>(x >= y);
+        }
+        if (op == "<=") {
+            return static_cast<bool>(x <= y);
+        }
+        if (op == "!=") {
+            return static_cast<bool>(x != y);
+        }
+    }
+    int2048 x = std::any_cast<int2048>(a);
+    int2048 y = std::any_cast<int2048>(b);
+    if (op == "<") {
+        return static_cast<bool>(x < y);
+    }
+    if (op == ">") {
+        return static_cast<bool>(x > y);
+    }
+    if (op == "==") {
+        return static_cast<bool>(x == y);
+    }
+    if (op == ">=") {
+        return static_cast<bool>(x >= y);
+    }
+    if (op == "<=") {
+        return static_cast<bool>(x <= y);
+    }
+    if (op == "!=") {
+        return static_cast<bool>(x != y);
+    }
+    return false;
+}
+
 std::any EvalVisitor::visitComparison(Python3Parser::ComparisonContext *context)  {
     auto comp_op = context -> comp_op();
     if (comp_op.empty()) {
         return visit(context -> arith_expr(0));
     }
     else {
-        auto left = std::any_cast<int2048>(visit(context -> arith_expr(0)));
+        auto left = visit(context -> arith_expr(0));
         for (int i = 0; i < comp_op.size(); i++) {
             auto op = context -> comp_op(i) -> getText();
-            auto right = std::any_cast<int2048>(visit(context -> arith_expr(i + 1)));
-            
-            // '<'|'>'|'=='|'>='|'<=' | '!='
-            if (op == "<" && left >= right) return false;
-            if (op == ">" && left <= right) return false;
-            if (op == "==" && left != right) return false;
-            if (op == ">=" && left < right) return false;
-            if (op == "<=" && left > right) return false;
-            if (op == "!=" && left == right) return false;
+            auto right = visit(context -> arith_expr(i + 1));
+            if (!compareValues(left, right, op)) return false;
             left = right;
         }
         return true;
@@ -398,7 +492,7 @@ std::any EvalVisitor::visitFactor(Python3Parser::FactorContext *context)  {
         return visit(atom_expr);
     }
     auto res = visit(context -> factor());
-    if (auto *flag = std::any_cast<bool>()(&res)) {
+    if (auto *flag = std::any_cast<bool>(&res)) {
         res = int2048(*flag ? 1LL : 0LL);
     }
     if (context -> MINUS()) {
