@@ -3,16 +3,28 @@
 #define PYTHON_INTERPRETER_EVALVISITOR_H
 
 
+#include <any>
 #include "Python3ParserBaseVisitor.h"
-
+#include <unordered_map>
 
 class EvalVisitor : public Python3ParserBaseVisitor {
+    enum class FlowKind { Break, Continue, Return };
+
+    struct FlowSignal {
+        FlowKind kind;
+        std::any value;
+    };
+
+    std::any calc(const std::any& left, const std::any& right, const std::string& op);
+
+    std::unordered_map<std::string, std::any> global; // 存全局变量
+
 	// TODO: override all methods of Python3ParserBaseVisitor
 	std::any visitFile_input(Python3Parser::File_inputContext *context) override;
 
     // std::any visitFuncdef(Python3Parser::FuncdefContext *context) override;
 
-    // std::any visitParameters(Python3Parser::ParametersContext *context) override;
+    std::any visitParameters(Python3Parser::ParametersContext *context) override;
 
     // std::any visitTypedargslist(Python3Parser::TypedargslistContext *context) override;
 
@@ -30,11 +42,11 @@ class EvalVisitor : public Python3ParserBaseVisitor {
 
     std::any visitFlow_stmt(Python3Parser::Flow_stmtContext *context) override;
 
-    // std::any visitBreak_stmt(Python3Parser::Break_stmtContext *context) override;
+    std::any visitBreak_stmt(Python3Parser::Break_stmtContext *context) override;
 
-    // std::any visitContinue_stmt(Python3Parser::Continue_stmtContext *context) override;
+    std::any visitContinue_stmt(Python3Parser::Continue_stmtContext *context) override;
 
-    // std::any visitReturn_stmt(Python3Parser::Return_stmtContext *context) override;
+    std::any visitReturn_stmt(Python3Parser::Return_stmtContext *context) override;
 
     std::any visitCompound_stmt(Python3Parser::Compound_stmtContext *context) override;
 
@@ -42,7 +54,7 @@ class EvalVisitor : public Python3ParserBaseVisitor {
 
     // std::any visitWhile_stmt(Python3Parser::While_stmtContext *context) override;
 
-    // std::any visitSuite(Python3Parser::SuiteContext *context) override;
+    std::any visitSuite(Python3Parser::SuiteContext *context) override;
 
     std::any visitTest(Python3Parser::TestContext *context) override;
 
@@ -52,7 +64,7 @@ class EvalVisitor : public Python3ParserBaseVisitor {
 
     // std::any visitNot_test(Python3Parser::Not_testContext *context) override;
 
-    // std::any visitComparison(Python3Parser::ComparisonContext *context) override;
+    std::any visitComparison(Python3Parser::ComparisonContext *context) override;
 
     std::any visitComp_op(Python3Parser::Comp_opContext *context) override;
 
@@ -64,7 +76,7 @@ class EvalVisitor : public Python3ParserBaseVisitor {
 
     std::any visitMuldivmod_op(Python3Parser::Muldivmod_opContext *context) override;
 
-    // std::any visitFactor(Python3Parser::FactorContext *context) override;
+    std::any visitFactor(Python3Parser::FactorContext *context) override;
 
     std::any visitAtom_expr(Python3Parser::Atom_exprContext *context) override;
 

@@ -1,6 +1,190 @@
 #include "Evalvisitor.h"
+#include "int2048.h"
 #include <string>
 #include <iostream>
+#include <variant>
+#include <sstream>
+#include <cmath>
+#include <iomanip>
+
+using sjtu::int2048;
+struct None {}; 
+
+static double int2048ToDouble(const sjtu::int2048& value) {
+    std::ostringstream text;
+    text << value;
+    return std::stod(text.str());
+}
+
+std::any EvalVisitor::calc(const std::any& left, const std::any& right, const std::string& op) {
+    // 运算：+ - * /  // %
+    if (op == "+") {
+        if (auto *leftStr = std::any_cast<std::string>(&left)) {
+            auto *rightStr = std::any_cast<std::string>(&right);
+            std::string res = *leftStr + *rightStr;
+            return res;
+        }
+        std::any a = left;
+        std::any b = right;
+        if (a.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(a);
+            a = int2048(flag ? 1LL : 0LL);
+        }
+        if (b.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(b);
+            b = int2048(flag ? 1LL : 0LL);
+        }
+        if (a.type() == typeid(double) || b.type() == typeid(double)) {
+            double x, y;
+            if (a.type() == typeid(double)) x = std::any_cast<double>(a);
+            else x = int2048ToDouble(std::any_cast<int2048>(a));
+            if (b.type() == typeid(double)) y = std::any_cast<double>(b);
+            else y = int2048ToDouble(std::any_cast<int2048>(b));
+            return x + y;
+        }
+        int2048 x = std::any_cast<int2048>(a);
+        int2048 y = std::any_cast<int2048>(b);
+        return x + y;
+    }   
+    if (op == "-") {
+        std::any a = left;
+        std::any b = right;
+        if (a.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(a);
+            a = int2048(flag ? 1LL : 0LL);
+        }
+        if (b.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(b);
+            b = int2048(flag ? 1LL : 0LL);
+        }
+        if (a.type() == typeid(double) || b.type() == typeid(double)) {
+            double x, y;
+            if (a.type() == typeid(double)) x = std::any_cast<double>(a);
+            else x = int2048ToDouble(std::any_cast<int2048>(a));
+            if (b.type() == typeid(double)) y = std::any_cast<double>(b);
+            else y = int2048ToDouble(std::any_cast<int2048>(b));
+            return x - y;
+        }
+        int2048 x = std::any_cast<int2048>(a);
+        int2048 y = std::any_cast<int2048>(b);
+        return x - y;
+    }   
+    if (op == "*") {
+        std::any a = left;
+        std::any b = right;
+        if (a.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(a);
+            a = int2048(flag ? 1LL : 0LL);
+        }
+        if (b.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(b);
+            b = int2048(flag ? 1LL : 0LL);
+        }
+
+        if (auto *leftStr = std::any_cast<std::string>(&left)) {
+            std::string res = "";
+            int2048 cnt = std::any_cast<int2048>(b);
+            while (cnt > 0) {
+                cnt -= int2048(1LL);
+                res += *leftStr;
+            }
+            return res;
+        }
+        if (auto *rightStr = std::any_cast<std::string>(&right)) {
+            std::string res = "";
+            int2048 cnt = std::any_cast<int2048>(a);
+            while (cnt > 0) {
+                cnt -= int2048(1LL);
+                res += *rightStr;
+            }
+            return res;
+        }
+
+        if (a.type() == typeid(double) || b.type() == typeid(double)) {
+            double x, y;
+            if (a.type() == typeid(double)) x = std::any_cast<double>(a);
+            else x = int2048ToDouble(std::any_cast<int2048>(a));
+            if (b.type() == typeid(double)) y = std::any_cast<double>(b);
+            else y = int2048ToDouble(std::any_cast<int2048>(b));
+            return x * y;
+        }
+        int2048 x = std::any_cast<int2048>(a);
+        int2048 y = std::any_cast<int2048>(b);
+        return x * y;
+    }   
+    if (op == "/") {
+        std::any a = left;
+        std::any b = right;
+        if (a.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(a);
+            a = flag ? 1.0 : 0.0;
+        }
+        if (b.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(b);
+            b = flag ? 1.0 : 0.0;
+        }
+        double x, y;
+        if (a.type() == typeid(double)) x = std::any_cast<double>(a);
+        else x = int2048ToDouble(std::any_cast<int2048>(a));
+        if (b.type() == typeid(double)) y = std::any_cast<double>(b);
+        else y = int2048ToDouble(std::any_cast<int2048>(b));
+        return x / y;
+    }
+    if (op == "//") {
+        std::any a = left;
+        std::any b = right;
+        if (a.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(a);
+            a = int2048(flag ? 1LL : 0LL);
+        }
+        if (b.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(b);
+            b = int2048(flag ? 1LL : 0LL);
+        }
+        if (a.type() == typeid(double) || b.type() == typeid(double)) {
+            double x, y;
+            if (a.type() == typeid(double)) x = std::any_cast<double>(a);
+            else x = int2048ToDouble(std::any_cast<int2048>(a));
+            if (b.type() == typeid(double)) y = std::any_cast<double>(b);
+            else y = int2048ToDouble(std::any_cast<int2048>(b));
+            return std::floor(x / y);
+        }
+        int2048 x = std::any_cast<int2048>(a);
+        int2048 y = std::any_cast<int2048>(b);
+        return x / y;
+    }
+    if (op == "%") {
+        std::any a = left;
+        std::any b = right;
+        if (a.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(a);
+            a = int2048(flag ? 1LL : 0LL);
+        }
+        if (b.type() == typeid(bool)) {
+            bool flag = std::any_cast<bool>(b);
+            b = int2048(flag ? 1LL : 0LL);
+        }
+        if (a.type() == typeid(double) || b.type() == typeid(double)) {
+            double x, y;
+            if (a.type() == typeid(double)) x = std::any_cast<double>(a);
+            else x = int2048ToDouble(std::any_cast<int2048>(a));
+            if (b.type() == typeid(double)) y = std::any_cast<double>(b);
+            else y = int2048ToDouble(std::any_cast<int2048>(b));
+
+            double remainder = std::fmod(x, y);
+            if (remainder == 0.0) {
+                return std::copysign(0.0, y);
+            }
+            if ((remainder < 0.0) != (y < 0.0)) {
+                remainder += y;
+            }
+            return remainder;
+        }
+        int2048 x = std::any_cast<int2048>(a);
+        int2048 y = std::any_cast<int2048>(b);
+        return x % y;
+    }
+}
 
 std::any EvalVisitor::visitFile_input(Python3Parser::File_inputContext *context) {
     for (auto *statement : context -> stmt()) {
@@ -10,12 +194,15 @@ std::any EvalVisitor::visitFile_input(Python3Parser::File_inputContext *context)
 }
 
 // std::any EvalVisitor::visitFuncdef(Python3Parser::FuncdefContext *context) {
-
+    
 // }
 
-// std::any EvalVisitor::visitParameters(Python3Parser::ParametersContext *context)  {
-
-// }
+std::any EvalVisitor::visitParameters(Python3Parser::ParametersContext *context)  {
+    if (auto *type = context -> typedargslist()) {
+        return visit(type);
+    }
+    return {};
+}
 
 // std::any EvalVisitor::visitTypedargslist(Python3Parser::TypedargslistContext *context)  {
 
@@ -44,10 +231,29 @@ std::any EvalVisitor::visitSmall_stmt(Python3Parser::Small_stmtContext *context)
     else return visit(context -> flow_stmt());
 }
 
-// 这个还要改！
 std::any EvalVisitor::visitExpr_stmt(Python3Parser::Expr_stmtContext *context)  {
-    visit(context -> testlist(0));
-    return {};
+    if (auto *op = context -> augassign()) {  // augassign: ('+=' | '-=' | '*=' | '/=' | '//=' | '%=' )
+        std::string opStr = op -> getText();
+        opStr.pop_back();
+        auto left_name = context -> testlist(0) -> getText();
+        auto left = global[left_name];
+        auto right = visit(context -> testlist(1));
+        global[left_name] = calc(left, right, opStr);
+        return {};
+    } 
+    else if (!context -> ASSIGN().empty()) {  // 赋值
+        auto testlist = context -> testlist();
+        auto value = visit(testlist.back());
+
+        for (int i = testlist.size() - 1; i > 0; i--) {
+            auto name = testlist[i-1] -> getText();
+            global[name] = value;
+        }
+        return {};
+    } 
+    else {
+        return visit(context -> testlist(0));
+    }
 }
 
 std::any EvalVisitor::visitAugassign(Python3Parser::AugassignContext *context)  {
@@ -64,17 +270,20 @@ std::any EvalVisitor::visitFlow_stmt(Python3Parser::Flow_stmtContext *context)  
     else return visit(context -> return_stmt());
 }
 
-// std::any EvalVisitor::visitBreak_stmt(Python3Parser::Break_stmtContext *context)  {
+std::any EvalVisitor::visitBreak_stmt(Python3Parser::Break_stmtContext *) {
+    return FlowSignal{FlowKind::Break, {}};
+}
 
-// }
+std::any EvalVisitor::visitContinue_stmt(Python3Parser::Continue_stmtContext *) {
+    return FlowSignal{FlowKind::Continue, {}};
+}
 
-// std::any EvalVisitor::visitContinue_stmt(Python3Parser::Continue_stmtContext *context)  {
-
-// }
-
-// std::any EvalVisitor::visitReturn_stmt(Python3Parser::Return_stmtContext *context)  {
-
-// }
+std::any EvalVisitor::visitReturn_stmt(Python3Parser::Return_stmtContext *context) {
+    if (auto *values = context -> testlist()) { // 有返回值
+        return FlowSignal{FlowKind::Return, visit(values)};
+    }
+    return FlowSignal{FlowKind::Return, {}};
+}
 
 std::any EvalVisitor::visitCompound_stmt(Python3Parser::Compound_stmtContext *context)  {
     if (auto *if_stmt = context -> if_stmt()) {
@@ -94,15 +303,18 @@ std::any EvalVisitor::visitCompound_stmt(Python3Parser::Compound_stmtContext *co
 
 // }
 
-// std::any EvalVisitor::visitSuite(Python3Parser::SuiteContext *context)  {
-//     if (auto *simple_stmt = context -> simple_stmt()) {
-//         return visit(simple_stmt);
-//     }
-//     // for (auto *statement : context -> stmt()) {
-//     //     auto result = visit(statement);
-//     //     if (std::any_cast<>)
-//     // }
-// }
+std::any EvalVisitor::visitSuite(Python3Parser::SuiteContext *context) {
+    if (auto *simple_stmt = context -> simple_stmt()) {
+        return visit(simple_stmt);
+    }
+    for (auto *statement : context -> stmt()) {
+        auto result = visit(statement);
+        if (std::any_cast<FlowSignal>(&result)) {
+            return result;
+        }
+    }
+    return {};
+}
 
 std::any EvalVisitor::visitTest(Python3Parser::TestContext *context)  {
     return visit(context -> or_test());
@@ -120,34 +332,43 @@ std::any EvalVisitor::visitTest(Python3Parser::TestContext *context)  {
 
 // }
 
-// std::any EvalVisitor::visitComparison(Python3Parser::ComparisonContext *context)  {
-
-// }
+// 还要比较字符串和浮点数
+std::any EvalVisitor::visitComparison(Python3Parser::ComparisonContext *context)  {
+    auto comp_op = context -> comp_op();
+    if (comp_op.empty()) {
+        return visit(context -> arith_expr(0));
+    }
+    else {
+        auto left = std::any_cast<int2048>(visit(context -> arith_expr(0)));
+        for (int i = 0; i < comp_op.size(); i++) {
+            auto op = context -> comp_op(i) -> getText();
+            auto right = std::any_cast<int2048>(visit(context -> arith_expr(i + 1)));
+            
+            // '<'|'>'|'=='|'>='|'<=' | '!='
+            if (op == "<" && left >= right) return false;
+            if (op == ">" && left <= right) return false;
+            if (op == "==" && left != right) return false;
+            if (op == ">=" && left < right) return false;
+            if (op == "<=" && left > right) return false;
+            if (op == "!=" && left == right) return false;
+            left = right;
+        }
+        return true;
+    }
+}
 
 std::any EvalVisitor::visitComp_op(Python3Parser::Comp_opContext *context)  {
     return context -> getText();
 }
 
-// 还要改 不能是long long
 std::any EvalVisitor::visitArith_expr(Python3Parser::Arith_exprContext *context)  {
     auto term = context -> term();
-
-    if (term.size() == 1) {
-        return visit(term[0]);
-    }
-
-    auto res = std::any_cast<long long>(visit(term[0]));
-
-    for (int i = 1; i < term.size(); i++) {
-        auto right = std::any_cast<long long>(visit(term[i]));
+    auto res = visit(term[0]);
+    if (term.size() == 1) return res;
+    for (std::size_t i = 1; i < term.size(); i++) {
+        auto right = visit(term[i]);
         auto op = context -> addorsub_op(i - 1) -> getText();
-
-        if (op == "+") {
-            res += right;
-        }
-        else {
-            res -= right;
-        }
+        res = calc(res, right, op);
     }
     return res;
 }
@@ -156,32 +377,14 @@ std::any EvalVisitor::visitAddorsub_op(Python3Parser::Addorsub_opContext *contex
     return context -> getText();
 }
 
-// 还要改 不能是long long 以及 除法取模 以及 字符串
 std::any EvalVisitor::visitTerm(Python3Parser::TermContext *context)  {
     auto factor = context -> factor();
-
-    if (factor.size() == 1) {
-        return visit(factor[0]);
-    }
-
-    auto res = std::any_cast<long long>(visit(factor[0]));
-
-    for (int i = 1; i < factor.size(); i++) {
-        auto right = std::any_cast<long long>(visit(factor[i]));
+    auto res = visit(factor[0]);
+    if (factor.size() == 1) return res;
+    for (std::size_t i = 1; i < factor.size(); i++) {
+        auto right = visit(factor[i]);
         auto op = context -> muldivmod_op(i - 1) -> getText();
-
-        if (op == "*") {
-            res *= right;
-        }
-        // else if (op == "/") {
-        //     res -= right;
-        // }
-        // else if (op == "//") {
-
-        // }
-        // else {
-        //     res %= right;
-        // }
+        res = calc(res, right, op);
     }
     return res;
 }
@@ -190,9 +393,22 @@ std::any EvalVisitor::visitMuldivmod_op(Python3Parser::Muldivmod_opContext *cont
     return context -> getText();
 }
 
-// std::any EvalVisitor::visitFactor(Python3Parser::FactorContext *context)  {
-
-// }
+std::any EvalVisitor::visitFactor(Python3Parser::FactorContext *context)  {
+    if (auto *atom_expr = context -> atom_expr()) {
+        return visit(atom_expr);
+    }
+    auto res = visit(context -> factor());
+    if (auto *flag = std::any_cast<bool>()(&res)) {
+        res = int2048(*flag ? 1LL : 0LL);
+    }
+    if (context -> MINUS()) {
+        if (auto *number = std::any_cast<double>(&res)) {
+            return -(*number);
+        }
+        return -std::any_cast<int2048>(res);
+    }
+    return res;
+}
 
 // 这个还要改！
 std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  {
@@ -202,14 +418,26 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
 
         if (name && name -> getText() == "print" && args) {
             auto value = visit(args -> argument(0) -> test(0));
-            std::cout << std::any_cast<long long>(value) << '\n';
+            if (std::any_cast<None>(&value)) {
+                std::cout << "None\n";
+            }
+            if (std::any_cast<int2048>(&value)) {
+                std::cout << std::any_cast<int2048>(value) << '\n';
+            }
+            if (auto *flag = std::any_cast<bool>(&value)) {
+                std::cout << (*flag ? "True" : "False") << '\n';
+            }
+            if (std::any_cast<std::string>(&value)) {
+                std::cout << std::any_cast<std::string>(value) << '\n';
+            }
+            if (std::any_cast<double>(&value)) {
+                std::cout << std::fixed << std::setprecision(6) << std::any_cast<double>(value) << '\n';
+            }
         }
 
         return {};
     }
-    else {
-        return visit(context -> atom());
-    }
+    else return visit(context -> atom());
 }
 
 std::any EvalVisitor::visitTrailer(Python3Parser::TrailerContext *context)  {
@@ -221,8 +449,41 @@ std::any EvalVisitor::visitTrailer(Python3Parser::TrailerContext *context)  {
 
 // 这个还要改！
 std::any EvalVisitor::visitAtom(Python3Parser::AtomContext *context)  {
+    if (auto *test = context -> test()) {
+        return visit(test);
+    }
     if (auto *number = context -> NUMBER()) {
-        return std::stoll(number -> getText());
+        // return std::stoll(number -> getText());
+        std::string text = number -> getText();
+        if (text.find('.') != std::string::npos) {
+            return std::stod(text);
+        }
+        return int2048(text);
+    }
+    if (auto *none = context -> NONE()) {
+        return None{};
+    }
+    if (auto *True = context -> TRUE()) {
+        return true;
+    }
+    if (auto *False = context -> FALSE()) {
+        return false;
+    }
+    if (auto *name = context -> NAME()) {
+        return global[name -> getText()];
+    }
+    if (auto *fstring = context -> format_string()) {
+
+    }
+    if (context -> STRING().size()) {
+        auto String = context -> STRING();
+        std::string res = "";
+        for (int i = 0; i < String.size(); i++) {
+            std::string temp = String[i] -> getText();
+            temp = temp.substr(1, temp.size() - 2);
+            res += temp;
+        }
+        return res;
     }
     return {};
 }
