@@ -2,10 +2,10 @@
 #include "int2048.h"
 #include <string>
 #include <iostream>
-#include <variant>
 #include <sstream>
 #include <cmath>
 #include <iomanip>
+#include <vector>
 
 using sjtu::int2048;
 struct None {}; 
@@ -184,6 +184,7 @@ std::any EvalVisitor::calc(const std::any& left, const std::any& right, const st
         int2048 y = std::any_cast<int2048>(b);
         return x % y;
     }
+    return {};
 }
 
 std::any EvalVisitor::visitFile_input(Python3Parser::File_inputContext *context) {
@@ -193,9 +194,19 @@ std::any EvalVisitor::visitFile_input(Python3Parser::File_inputContext *context)
     return {}; // 输入无返回值
 }
 
-// std::any EvalVisitor::visitFuncdef(Python3Parser::FuncdefContext *context) {
+std::any EvalVisitor::visitFuncdef(Python3Parser::FuncdefContext *context) {
+    // funcdef: 'def' NAME parameters ':' suite;
+    std::string name = context -> NAME() -> getText();
+    function[name].suite = context -> suite();
     
-// }
+    // 参数表
+    if (auto *args = context -> parameters() -> typedargslist()) {
+        for (auto *param : args -> tfpdef()) {
+            function[name].parameters.push_back(param -> NAME() -> getText());
+        }
+    }
+    return {}; 
+}
 
 std::any EvalVisitor::visitParameters(Python3Parser::ParametersContext *context)  {
     if (auto *type = context -> typedargslist()) {
@@ -244,6 +255,15 @@ std::any EvalVisitor::visitExpr_stmt(Python3Parser::Expr_stmtContext *context)  
     else if (!context -> ASSIGN().empty()) {  // 赋值
         auto testlist = context -> testlist();
         auto value = visit(testlist.back());
+
+        if (auto *Value = std::any_cast<std::vector<std::any>>(&value)) {
+            auto targets = testlist.front() -> test();
+            for (int i = 0; i < targets.size(); i++) {
+                auto name = targets[i] -> getText();
+                global[name] = (*Value)[i];
+            }
+            return {};
+        }
 
         for (int i = testlist.size() - 1; i > 0; i--) {
             auto name = testlist[i-1] -> getText();
@@ -295,13 +315,57 @@ std::any EvalVisitor::visitCompound_stmt(Python3Parser::Compound_stmtContext *co
     else return visit(context -> funcdef());
 }
 
-// std::any EvalVisitor::visitIf_stmt(Python3Parser::If_stmtContext *context)  {
+bool toBool(const std::any& value) {
+    if (auto *flag = std::any_cast<bool>(&value)) {
+        return *flag;
+    }   
+    if (auto *integer = std::any_cast<int2048>(&value)) {
+        return *integer != int2048(0LL);
+    }
+    if (auto *number = std::any_cast<double>(&value)) {
+        return *number != 0.0;
+    }
+    if (auto *text = std::any_cast<std::string>(&value)) {
+        return !text -> empty();
+    }
+    if (std::any_cast<None>(&value)) {
+        return false;
+    }
+    return false;
+}
 
-// }
+std::any EvalVisitor::visitIf_stmt(Python3Parser::If_stmtContext *context)  {
+    // if_stmt: 'if' test ':' suite ('elif' test ':' suite)* ('else' ':' suite)?;
+    auto tests = context -> test();
+    for (int i = 0; i < tests.size(); i++) {
+        if (toBool(visit(tests[i]))) {
+            return visit(context -> suite(i));
+        }
+    }
+    if (auto *Else = context -> ELSE()) {
+        return visit(context -> suite(tests.size()));
+    }
+    return {};
+}
 
-// std::any EvalVisitor::visitWhile_stmt(Python3Parser::While_stmtContext *context)  {
-
-// }
+std::any EvalVisitor::visitWhile_stmt(Python3Parser::While_stmtContext *context)  {
+    // while_stmt: 'while' test ':' suite;
+    while (toBool(visit(context -> test()))) {
+        auto res = visit(context -> suite());
+        if (auto signal = std::any_cast<FlowSignal>(&res)) {
+            if (signal -> kind == FlowKind::Break) {
+                return {};
+            }
+            else if (signal -> kind == FlowKind::Continue) {
+                continue;
+            }
+            else {
+                return res;
+            }
+        }
+    }
+    return {};
+}
 
 std::any EvalVisitor::visitSuite(Python3Parser::SuiteContext *context) {
     if (auto *simple_stmt = context -> simple_stmt()) {
@@ -320,17 +384,35 @@ std::any EvalVisitor::visitTest(Python3Parser::TestContext *context)  {
     return visit(context -> or_test());
 }
 
-// std::any EvalVisitor::visitOr_test(Python3Parser::Or_testContext *context)  {
+std::any EvalVisitor::visitOr_test(Python3Parser::Or_testContext *context)  {
+    auto and_tests = context -> and_test();
+    // 一定要特判！！ 否则print(1)都会输出True
+    if (and_tests.size() == 1) {
+        return visit(and_tests[0]);
+    }
+    for (int i = 0; i < and_tests.size(); i++) {
+        if (toBool(visit(and_tests[i]))) return true;
+    }
+    return false;
+}
 
-// }
+std::any EvalVisitor::visitAnd_test(Python3Parser::And_testContext *context)  {
+    auto not_tests = context -> not_test();
+    if (not_tests.size() == 1) {
+        return visit(not_tests[0]);
+    }
+    for (int i = 0; i < not_tests.size(); i++) {
+        if (!toBool(visit(not_tests[i]))) return false;
+    }
+    return true;
+}
 
-// std::any EvalVisitor::visitAnd_test(Python3Parser::And_testContext *context)  {
-
-// }
-
-// std::any EvalVisitor::visitNot_test(Python3Parser::Not_testContext *context)  {
-
-// }
+std::any EvalVisitor::visitNot_test(Python3Parser::Not_testContext *context)  {
+    if (auto *notTest = context -> not_test()) {
+        return !toBool(visit(notTest));
+    }
+    else return visit(context -> comparison());
+}
 
 bool compareValues(const std::any& left, const std::any& right, const std::string& op) {
     // op：'<' | '>' | '==' | '>=' | '<=' | '!=';
@@ -507,10 +589,11 @@ std::any EvalVisitor::visitFactor(Python3Parser::FactorContext *context)  {
 // 这个还要改！
 std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  {
     if (auto *trailer = context -> trailer()) {
+        // 有括号()
         auto *name = context -> atom() -> NAME();
         auto *args = trailer -> arglist();
 
-        if (name && name -> getText() == "print" && args) {
+        if (name -> getText() == "print" && args) {
             auto value = visit(args -> argument(0) -> test(0));
             if (std::any_cast<None>(&value)) {
                 std::cout << "None\n";
@@ -527,6 +610,35 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
             if (std::any_cast<double>(&value)) {
                 std::cout << std::fixed << std::setprecision(6) << std::any_cast<double>(value) << '\n';
             }
+            return {};
+        }
+
+        auto it = function.find(name -> getText());
+        // 函数分支
+        if (it != function.end()) {
+            auto *suite = (it -> second).suite;
+
+            // 这里要给参数赋值
+            auto &parameters = it -> second.parameters;
+            std::unordered_map<std::string, std::any> local;
+            for (int i = 0; i < parameters.size(); i++) {
+                local[parameters[i]] = visit(args -> argument(i) -> test(0));
+            }
+            scope.push_back(local);
+            auto res = visit(suite);
+            scope.pop_back();
+
+            if (auto *signal = std::any_cast<FlowSignal>(&res)) {
+                if (signal -> kind == FlowKind::Return && signal -> value.has_value()) {
+                    return signal -> value;
+                }
+            }
+            return None{};
+        }   
+
+        // 类型转换
+        else {
+
         }
 
         return {};
@@ -564,20 +676,28 @@ std::any EvalVisitor::visitAtom(Python3Parser::AtomContext *context)  {
         return false;
     }
     if (auto *name = context -> NAME()) {
-        return global[name -> getText()];
-    }
-    if (auto *fstring = context -> format_string()) {
-
+        auto key = name -> getText();
+        if (!scope.empty()) {
+            auto &local = scope.back();
+            auto it = local.find(key);
+            if (it != local.end()) {
+                return it -> second;
+            }
+        }
+        return global[key];
     }
     if (context -> STRING().size()) {
         auto String = context -> STRING();
         std::string res = "";
         for (int i = 0; i < String.size(); i++) {
             std::string temp = String[i] -> getText();
-            temp = temp.substr(1, temp.size() - 2);
+            temp = temp.substr(1, temp.size() - 2); // 去掉 ""
             res += temp;
         }
         return res;
+    }
+    if (auto *fstring = context -> format_string()) {
+        
     }
     return {};
 }
@@ -586,9 +706,17 @@ std::any EvalVisitor::visitAtom(Python3Parser::AtomContext *context)  {
 
 // }
 
-// 这个还要改！
 std::any EvalVisitor::visitTestlist(Python3Parser::TestlistContext *context)  {
-    return visit(context -> test(0));
+    // testlist: test (',' test)* (',')?; //算式  eg： a,b   a   a+b
+    if (context -> COMMA().empty()) {
+        return visit(context -> test(0));
+    }
+    std::vector<std::any> testlist;
+    auto tests = context -> test();
+    for (int i = 0; i < tests.size(); i++) {
+        testlist.push_back(visit(tests[i]));
+    }
+    return testlist;
 }
 
 // std::any EvalVisitor::visitArglist(Python3Parser::ArglistContext *context)  {
