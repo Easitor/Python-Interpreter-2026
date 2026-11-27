@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iomanip>
 #include <vector>
+#include <utility>
 
 using sjtu::int2048;
 struct None {}; 
@@ -246,10 +247,42 @@ std::any EvalVisitor::visitExpr_stmt(Python3Parser::Expr_stmtContext *context)  
     if (auto *op = context -> augassign()) {  // augassign: ('+=' | '-=' | '*=' | '/=' | '//=' | '%=' )
         std::string opStr = op -> getText();
         opStr.pop_back();
-        auto left_name = context -> testlist(0) -> getText();
-        auto left = global[left_name];
-        auto right = visit(context -> testlist(1));
-        global[left_name] = calc(left, right, opStr);
+
+        auto left_testlist = context -> testlist(0) -> test();
+        auto right_testlist = context -> testlist(1) -> test();
+        
+        std::vector<std::pair<std::string, std::any>> scope_temp;
+        std::vector<std::pair<std::string, std::any>> global_temp;
+        for (size_t i = 0; i < left_testlist.size(); i++) {
+            auto left_name = left_testlist[i] -> getText();
+            // 这边要注意先读旧值！
+            std::any left;
+            bool flag = 0;
+            if (scope.size()) {
+                auto &u = scope.top();
+                if (u.find(left_name) != u.end()) {
+                    left = u[left_name];
+                    flag = 1; // 局部变量
+                }
+            }
+            if (!flag) {
+                left = global[left_name];
+            }
+            auto right = visit(right_testlist[i]);
+            if (flag) {
+                scope_temp.push_back({left_name, calc(left, right, opStr)});
+            }
+            else {
+                global_temp.push_back({left_name, calc(left, right, opStr)});
+            }
+        }
+        for (auto u : scope_temp) {
+            scope.top()[u.first] = u.second;
+        }
+        for (auto u : global_temp) {
+            global[u.first] = u.second;
+        }
+        
         return {};
     } 
     else if (!context -> ASSIGN().empty()) {  // 赋值
@@ -260,14 +293,40 @@ std::any EvalVisitor::visitExpr_stmt(Python3Parser::Expr_stmtContext *context)  
             auto targets = testlist.front() -> test();
             for (int i = 0; i < targets.size(); i++) {
                 auto name = targets[i] -> getText();
-                global[name] = (*Value)[i];
+                if (scope.size()) {
+                    auto &u = scope.top();
+                    if (u.find(name) != u.end()) {
+                        u[name] = (*Value)[i];
+                        continue;
+                    }
+                }
+                if (global.find(name) != global.end() || scope.empty()) {
+                    global[name] = (*Value)[i];    
+                }
+                else {
+                    auto &u = scope.top();
+                    u[name] = (*Value)[i];
+                }
             }
             return {};
         }
 
         for (int i = testlist.size() - 1; i > 0; i--) {
             auto name = testlist[i-1] -> getText();
-            global[name] = value;
+            if (scope.size()) {
+                auto &u = scope.top();
+                if (u.find(name) != u.end()) {
+                    u[name] = value;
+                    continue;
+                }
+            }
+            if (global.find(name) != global.end() || scope.empty()) {
+                global[name] = value;    
+            }
+            else {
+                auto &u = scope.top();
+                u[name] = value;
+            }
         }
         return {};
     } 
@@ -641,9 +700,9 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
             for (int i = 0; i < parameters.size(); i++) {
                 local[parameters[i]] = visit(args -> argument(i) -> test(0));
             }
-            scope.push_back(local);
+            scope.push(local);
             auto res = visit(suite);
-            scope.pop_back();
+            scope.pop();
 
             if (auto *signal = std::any_cast<FlowSignal>(&res)) {
                 if (signal -> kind == FlowKind::Return && signal -> value.has_value()) {
@@ -725,7 +784,7 @@ std::any EvalVisitor::visitAtom(Python3Parser::AtomContext *context)  {
     if (auto *name = context -> NAME()) {
         auto key = name -> getText();
         if (!scope.empty()) {
-            auto &local = scope.back();
+            auto &local = scope.top();
             auto it = local.find(key);
             if (it != local.end()) {
                 return it -> second;

@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <stack>
 
 class EvalVisitor : public Python3ParserBaseVisitor {
     enum class FlowKind { Break, Continue, Return };
@@ -27,7 +28,7 @@ class EvalVisitor : public Python3ParserBaseVisitor {
     std::unordered_map<std::string, std::any> global; // 存全局变量
     std::unordered_map<std::string, Function> function; // 存函数
 
-    std::vector<std::unordered_map<std::string, std::any>> scope; // 存局部变量
+    std::stack<std::unordered_map<std::string, std::any>> scope; // 存局部变量
 
 	// TODO: override all methods of Python3ParserBaseVisitor
 	std::any visitFile_input(Python3Parser::File_inputContext *context) override;
