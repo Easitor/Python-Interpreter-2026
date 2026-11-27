@@ -334,6 +334,27 @@ bool toBool(const std::any& value) {
     return false;
 }
 
+std::string toStr(const std::any& value) {
+    if (auto *flag = std::any_cast<bool>(&value)) {
+        return *flag ? "True" : "False";
+    }   
+    if (auto *integer = std::any_cast<int2048>(&value)) {
+        std::ostringstream text;
+        text << *integer;
+        return text.str();
+    }
+    if (auto *number = std::any_cast<double>(&value)) {
+        return std::to_string(*number);
+    }
+    if (auto *text = std::any_cast<std::string>(&value)) {
+        return *text;
+    }
+    if (std::any_cast<None>(&value)) {
+        return "None";
+    }
+    return "";
+}
+
 std::any EvalVisitor::visitIf_stmt(Python3Parser::If_stmtContext *context)  {
     // if_stmt: 'if' test ':' suite ('elif' test ':' suite)* ('else' ':' suite)?;
     auto tests = context -> test();
@@ -593,23 +614,19 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
         auto *name = context -> atom() -> NAME();
         auto *args = trailer -> arglist();
 
-        if (name -> getText() == "print" && args) {
-            auto value = visit(args -> argument(0) -> test(0));
-            if (std::any_cast<None>(&value)) {
-                std::cout << "None\n";
+        if (name -> getText() == "print") {
+            if (!args) {
+                std::cout << "\n";
+                return {};
             }
-            if (std::any_cast<int2048>(&value)) {
-                std::cout << std::any_cast<int2048>(value) << '\n';
+            std::string res = "";
+            int size = (args -> argument()).size();
+            for (int i = 0; i < size; i++) {
+                auto value = visit(args -> argument(i) -> test(0));
+                res += toStr(value);
+                if (i < size - 1) res += " ";
             }
-            if (auto *flag = std::any_cast<bool>(&value)) {
-                std::cout << (*flag ? "True" : "False") << '\n';
-            }
-            if (std::any_cast<std::string>(&value)) {
-                std::cout << std::any_cast<std::string>(value) << '\n';
-            }
-            if (std::any_cast<double>(&value)) {
-                std::cout << std::fixed << std::setprecision(6) << std::any_cast<double>(value) << '\n';
-            }
+            std::cout << res << '\n';
             return {};
         }
 
@@ -638,10 +655,40 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
 
         // 类型转换
         else {
-
+            auto temp = visit(args -> argument(0) -> test(0));
+            if (name -> getText() == "int") {
+                if (temp.type() == typeid(bool)) {
+                    if (std::any_cast<bool>(temp)) return int2048(1LL);
+                    else return int2048(0LL);
+                } 
+                if (temp.type() == typeid(double)) {
+                    long long num = std::any_cast<double>(temp);
+                    return int2048(num);
+                }
+                if (temp.type() == typeid(std::string)) {
+                    return int2048(std::any_cast<std::string>(temp));
+                }
+            }
+            if (name -> getText() == "float") {
+                if (temp.type() == typeid(bool)) {
+                    if (std::any_cast<bool>(temp)) return 1.0;
+                    else return 0.0;
+                } 
+                if (temp.type() == typeid(int2048)) {
+                    return int2048ToDouble(std::any_cast<int2048>(temp));
+                }
+                if (temp.type() == typeid(std::string)) {
+                    return std::stod(std::any_cast<std::string>(temp));
+                }
+            }
+            if (name -> getText() == "str") {
+                return toStr(temp);
+            }
+            if (name -> getText() == "bool") {
+                return toBool(temp);
+            }
+            return {};
         }
-
-        return {};
     }
     else return visit(context -> atom());
 }
