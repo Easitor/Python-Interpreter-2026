@@ -4,17 +4,45 @@
 #include <iostream>
 #include <sstream>
 #include <cmath>
+#include <cstdlib>
+#include <cctype>
 #include <iomanip>
 #include <vector>
 #include <utility>
+#ifdef __linux__
+#include <sys/resource.h>
+#endif
+
 
 using sjtu::int2048;
 struct None {}; 
 
+// 深递归（题目保证栈深度不超过 2000 层）会耗尽默认 8MB 栈空间，
+// 在程序启动时尽量调大栈上限，避免合法的深递归测试点出现 RE。
+namespace {
+struct StackLimitRaiser {
+    StackLimitRaiser() {
+#ifdef __linux__
+        rlimit limit;
+        if (getrlimit(RLIMIT_STACK, &limit) == 0) {
+            rlim_t wanted = 256ull * 1024 * 1024;
+            if (limit.rlim_cur != RLIM_INFINITY && limit.rlim_cur < wanted) {
+                limit.rlim_cur = (limit.rlim_max == RLIM_INFINITY || limit.rlim_max > wanted)
+                                     ? wanted : limit.rlim_max;
+                setrlimit(RLIMIT_STACK, &limit);
+            }
+        }
+#endif
+    }
+} stackLimitRaiser;
+}
+
 static double int2048ToDouble(const sjtu::int2048& value) {
     std::ostringstream text;
     text << value;
-    return std::stod(text.str());
+    std::string s = text.str();
+    // 用 strtod 而不是 stod：超出 double 范围时返回 ±inf 而不是抛 out_of_range
+    return std::strtod(s.c_str(), nullptr);
 }
 
 std::any EvalVisitor::calc(const std::any& left, const std::any& right, const std::string& op) {
@@ -148,7 +176,25 @@ std::any EvalVisitor::calc(const std::any& left, const std::any& right, const st
             else x = int2048ToDouble(std::any_cast<int2048>(a));
             if (b.type() == typeid(double)) y = std::any_cast<double>(b);
             else y = int2048ToDouble(std::any_cast<int2048>(b));
-            return std::floor(x / y);
+            // 与标准 Python 的浮点向下取整除法保持一致：
+            // 先修正 fmod 的余数，再对商向下取整（否则 1.0 // 0.1 会错误地得到 10.0）
+            double mod = std::fmod(x, y);
+            double div = (x - mod) / y;
+            if (mod != 0.0) {
+                if ((y < 0.0) != (mod < 0.0)) {
+                    mod += y;
+                    div -= 1.0;
+                }
+            }
+            double floordiv;
+            if (div != 0.0) {
+                floordiv = std::floor(div);
+                if (div - floordiv > 0.5) floordiv += 1.0;
+            }
+            else {
+                floordiv = std::copysign(0.0, x / y);
+            }
+            return floordiv;
         }
         int2048 x = std::any_cast<int2048>(a);
         int2048 y = std::any_cast<int2048>(b);
@@ -198,19 +244,22 @@ std::any EvalVisitor::visitFile_input(Python3Parser::File_inputContext *context)
 std::any EvalVisitor::visitFuncdef(Python3Parser::FuncdefContext *context) {
     // funcdef: 'def' NAME parameters ':' suite;
     std::string name = context -> NAME() -> getText();
-    function[name].suite = context -> suite();
-    
+    // 重新定义同名函数时必须整体替换（包括清空旧的参数表与默认值）
+    Function fn;
+    fn.suite = context -> suite();
+
     // 参数表
     if (auto *args = context -> parameters() -> typedargslist()) {
         auto test = args -> test();
         auto tfpdef = args -> tfpdef();
         for (auto *param : tfpdef) {
-            function[name].parameters.push_back(param -> NAME() -> getText());
+            fn.parameters.push_back(param -> NAME() -> getText());
         }
         for (size_t i = 0; i < test.size(); i++) {
-            function[name].defaults[function[name].parameters[i + tfpdef.size() - test.size()]] = visit(test[i]);
+            fn.defaults[fn.parameters[i + tfpdef.size() - test.size()]] = visit(test[i]);
         }
     }
+    function[name] = fn;
     return {}; 
 }
 
@@ -674,13 +723,27 @@ std::any EvalVisitor::visitFactor(Python3Parser::FactorContext *context)  {
 std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  {
     if (auto *trailer = context -> trailer()) {
         // 有括号()
-        auto *name = context -> atom() -> NAME();
+        auto *atom = context -> atom();
+        std::string name;
+        if (auto *identifier = atom -> NAME()) {
+            name = identifier -> getText();
+        }
+        else {
+            // 允许 (f)(1) 这种被括号包裹的被调用者
+            std::string text = atom -> getText();
+            size_t begin = 0, end = text.size();
+            while (begin < end && (text[begin] == '(' ||
+                   std::isspace(static_cast<unsigned char>(text[begin])))) begin++;
+            while (end > begin && (text[end - 1] == ')' ||
+                   std::isspace(static_cast<unsigned char>(text[end - 1])))) end--;
+            name = text.substr(begin, end - begin);
+        }
         auto *args = trailer -> arglist();
 
-        if (name -> getText() == "print") {
+        if (name == "print") {
             if (!args) {
                 std::cout << "\n";
-                return {};
+                return None{};
             }
             std::string res = "";
             int size = (args -> argument()).size();
@@ -690,10 +753,10 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
                 if (i < size - 1) res += " ";
             }
             std::cout << res << '\n';
-            return {};
+            return None{};
         }
 
-        auto it = function.find(name -> getText());
+        auto it = function.find(name);
         // 函数分支
         if (it != function.end()) {
             auto *suite = (it -> second).suite;
@@ -717,7 +780,13 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
             }
             for (auto param_name : parameters) {
                 if (local.find(param_name) == local.end()) {
-                    local[param_name] = defaults.at(param_name);
+                    auto default_it = defaults.find(param_name);
+                    if (default_it != defaults.end()) {
+                        local[param_name] = default_it -> second;
+                    }
+                    else {
+                        local[param_name] = None{};
+                    }
                 }
             }
 
@@ -735,8 +804,9 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
 
         // 类型转换
         else {
+            if (args == nullptr || args -> argument().empty()) return {};
             auto temp = visit(args -> argument(0) -> test(0));
-            if (name -> getText() == "int") {
+            if (name == "int") {
                 if (temp.type() == typeid(bool)) {
                     if (std::any_cast<bool>(temp)) return int2048(1LL);
                     else return int2048(0LL);
@@ -748,8 +818,11 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
                 if (temp.type() == typeid(std::string)) {
                     return int2048(std::any_cast<std::string>(temp));
                 }
+                if (temp.type() == typeid(int2048)) {
+                    return temp;
+                }
             }
-            if (name -> getText() == "float") {
+            if (name == "float") {
                 if (temp.type() == typeid(bool)) {
                     if (std::any_cast<bool>(temp)) return 1.0;
                     else return 0.0;
@@ -758,13 +831,17 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
                     return int2048ToDouble(std::any_cast<int2048>(temp));
                 }
                 if (temp.type() == typeid(std::string)) {
-                    return std::stod(std::any_cast<std::string>(temp));
+                    std::string text = std::any_cast<std::string>(temp);
+                    return std::strtod(text.c_str(), nullptr);
+                }
+                if (temp.type() == typeid(double)) {
+                    return temp;
                 }
             }
-            if (name -> getText() == "str") {
+            if (name == "str") {
                 return toStr(temp);
             }
-            if (name -> getText() == "bool") {
+            if (name == "bool") {
                 return toBool(temp);
             }
             return {};
@@ -782,50 +859,69 @@ std::any EvalVisitor::visitTrailer(Python3Parser::TrailerContext *context)  {
 
 std::string decodeString(std::string temp, bool is_fstring) {
     std::string res = "";
-    for (int j = 0; j < temp.size(); j++) {
-        if (temp[j] == '\\') {
-            if (j < temp.size() - 1 && temp[j + 1] == 't') {
-                res.push_back('\t');
-                j++;
-            }
-            else if (j < temp.size() - 1 && temp[j + 1] == 'n') {
-                res.push_back('\n');
-                j++;
-            }
-            else if (j < temp.size() - 1 && temp[j + 1] == '\\') {
+    res.reserve(temp.size());
+    for (size_t j = 0; j < temp.size(); j++) {
+        char cur = temp[j];
+        if (cur == '\\') {
+            // 反斜杠转义：规则参考 C++ 字符串字面量
+            if (j + 1 >= temp.size()) {
                 res += '\\';
-                j++;
+                break;
             }
-            else if (j < temp.size() - 1 && temp[j + 1] == '"') {
-                res += '"';
-                j++;
+            char esc = temp[++j];
+            switch (esc) {
+                case 'a': res += '\a'; break;
+                case 'b': res += '\b'; break;
+                case 'f': res += '\f'; break;
+                case 'n': res += '\n'; break;
+                case 'r': res += '\r'; break;
+                case 't': res += '\t'; break;
+                case 'v': res += '\v'; break;
+                case '\\': res += '\\'; break;
+                case '\'': res += '\''; break;
+                case '"': res += '"'; break;
+                case '?': res += '?'; break;
+                case '\n': break;  // 续行：反斜杠 + 换行，直接忽略
+                case 'x': {
+                    // 十六进制转义，最多两位（与 Python 行为一致，保证可显示字符）
+                    int value = 0, cnt = 0;
+                    while (cnt < 2 && j + 1 < temp.size() &&
+                           std::isxdigit(static_cast<unsigned char>(temp[j + 1]))) {
+                        char h = temp[++j];
+                        if (h >= '0' && h <= '9') value = value * 16 + (h - '0');
+                        else if (h >= 'a' && h <= 'f') value = value * 16 + (h - 'a' + 10);
+                        else value = value * 16 + (h - 'A' + 10);
+                        cnt++;
+                    }
+                    if (cnt == 0) res += 'x';
+                    else res += static_cast<char>(value);
+                    break;
+                }
+                default:
+                    if (esc >= '0' && esc <= '7') {
+                        // 八进制转义，最多三位
+                        int value = esc - '0', cnt = 1;
+                        while (cnt < 3 && j + 1 < temp.size() &&
+                               temp[j + 1] >= '0' && temp[j + 1] <= '7') {
+                            value = value * 8 + (temp[++j] - '0');
+                            cnt++;
+                        }
+                        res += static_cast<char>(value);
+                    }
+                    else {
+                        // 未知转义：保留字符本身（C++ 中为未定义，输入保证合法）
+                        res += esc;
+                    }
+                    break;
             }
-            else if (j < temp.size() - 1 && temp[j + 1] == '\'') {
-                res += '\'';
-                j++;
-            }
-            else res += '\\';
         }
-        else if (is_fstring && temp[j] == '{') {
-            if (j < temp.size() - 1 && temp[j + 1] == '{') {
-                res += '{';
-                j++;
-            }
-            else {
-                res += '{';
-            }
-        }
-        else if (is_fstring && temp[j] == '}') {
-            if (j < temp.size() - 1 && temp[j + 1] == '}') {
-                res += '}';
-                j++;
-            }
-            else {
-                res += '}';
-            }
+        else if (is_fstring && (cur == '{' || cur == '}')) {
+            // f-string 中 {{ 与 }} 表示字面大括号
+            if (j + 1 < temp.size() && temp[j + 1] == cur) j++;
+            res += cur;
         }
         else {
-            res += temp[j];
+            res += cur;
         }
     }
     return res;
