@@ -671,7 +671,6 @@ std::any EvalVisitor::visitFactor(Python3Parser::FactorContext *context)  {
     return res;
 }
 
-// 这个还要改！
 std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  {
     if (auto *trailer = context -> trailer()) {
         // 有括号()
@@ -781,7 +780,57 @@ std::any EvalVisitor::visitTrailer(Python3Parser::TrailerContext *context)  {
     return {};
 }
 
-// 这个还要改！
+std::string decodeString(std::string temp, bool is_fstring) {
+    std::string res = "";
+    for (int j = 0; j < temp.size(); j++) {
+        if (temp[j] == '\\') {
+            if (j < temp.size() - 1 && temp[j + 1] == 't') {
+                res.push_back('\t');
+                j++;
+            }
+            else if (j < temp.size() - 1 && temp[j + 1] == 'n') {
+                res.push_back('\n');
+                j++;
+            }
+            else if (j < temp.size() - 1 && temp[j + 1] == '\\') {
+                res += '\\';
+                j++;
+            }
+            else if (j < temp.size() - 1 && temp[j + 1] == '"') {
+                res += '"';
+                j++;
+            }
+            else if (j < temp.size() - 1 && temp[j + 1] == '\'') {
+                res += '\'';
+                j++;
+            }
+            else res += '\\';
+        }
+        else if (is_fstring && temp[j] == '{') {
+            if (j < temp.size() - 1 && temp[j + 1] == '{') {
+                res += '{';
+                j++;
+            }
+            else {
+                res += '{';
+            }
+        }
+        else if (is_fstring && temp[j] == '}') {
+            if (j < temp.size() - 1 && temp[j + 1] == '}') {
+                res += '}';
+                j++;
+            }
+            else {
+                res += '}';
+            }
+        }
+        else {
+            res += temp[j];
+        }
+    }
+    return res;
+}
+
 std::any EvalVisitor::visitAtom(Python3Parser::AtomContext *context)  {
     if (auto *test = context -> test()) {
         return visit(test);
@@ -816,23 +865,38 @@ std::any EvalVisitor::visitAtom(Python3Parser::AtomContext *context)  {
     }
     if (context -> STRING().size()) {
         auto String = context -> STRING();
-        std::string res = "";
+        std::string Str = "";
         for (int i = 0; i < String.size(); i++) {
             std::string temp = String[i] -> getText();
-            temp = temp.substr(1, temp.size() - 2); // 去掉 ""
-            res += temp;
+            temp = temp.substr(1, temp.size() - 2);
+            Str += decodeString(temp, 0);
+            // 还要处理\t和\\和\\t
         }
-        return res;
+        return Str;
     }
     if (auto *fstring = context -> format_string()) {
-        
+        return visit(fstring);
     }
     return {};
 }
 
-// std::any EvalVisitor::visitFormat_string(Python3Parser::Format_stringContext *context)  {
-
-// }
+std::any EvalVisitor::visitFormat_string(Python3Parser::Format_stringContext *context)  {
+    // format_string: FORMAT_QUOTATION (FORMAT_STRING_LITERAL | '{' testlist '}')* QUOTATION;
+    std::string res = "";
+    for (auto *child : context -> children) {
+        // 表达式
+        if (auto *testlist = dynamic_cast<Python3Parser::TestlistContext*>(child)) {
+            res += toStr(visit(testlist));
+        }
+        // 文字 
+        else if (auto *terminal = dynamic_cast<antlr4::tree::TerminalNode*>(child)) {
+            if (terminal -> getSymbol() -> getType() == Python3Parser::FORMAT_STRING_LITERAL) {
+                res += decodeString(terminal -> getText(), 1);
+            }
+        }
+    }
+    return res;
+}
 
 std::any EvalVisitor::visitTestlist(Python3Parser::TestlistContext *context)  {
     // testlist: test (',' test)* (',')?; //算式  eg： a,b   a   a+b

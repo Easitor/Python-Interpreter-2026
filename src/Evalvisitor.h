@@ -96,7 +96,7 @@ class EvalVisitor : public Python3ParserBaseVisitor {
 
     std::any visitAtom(Python3Parser::AtomContext *context) override;
 
-    // std::any visitFormat_string(Python3Parser::Format_stringContext *context) override;
+    std::any visitFormat_string(Python3Parser::Format_stringContext *context) override;
 
     std::any visitTestlist(Python3Parser::TestlistContext *context) override;
 
