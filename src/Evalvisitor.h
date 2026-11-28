@@ -21,6 +21,7 @@ class EvalVisitor : public Python3ParserBaseVisitor {
     struct Function{
         Python3Parser::SuiteContext *suite;
         std::vector<std::string> parameters; // 参数名
+        std::map<std::string, std::any> defaults; // 默认值
     };
 
     std::any calc(const std::any& left, const std::any& right, const std::string& op);

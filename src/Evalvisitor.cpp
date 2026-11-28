@@ -192,7 +192,7 @@ std::any EvalVisitor::visitFile_input(Python3Parser::File_inputContext *context)
     for (auto *statement : context -> stmt()) {
         visit(statement);
     }   
-    return {}; // 输入无返回值
+    return {}; 
 }
 
 std::any EvalVisitor::visitFuncdef(Python3Parser::FuncdefContext *context) {
@@ -202,8 +202,13 @@ std::any EvalVisitor::visitFuncdef(Python3Parser::FuncdefContext *context) {
     
     // 参数表
     if (auto *args = context -> parameters() -> typedargslist()) {
-        for (auto *param : args -> tfpdef()) {
+        auto test = args -> test();
+        auto tfpdef = args -> tfpdef();
+        for (auto *param : tfpdef) {
             function[name].parameters.push_back(param -> NAME() -> getText());
+        }
+        for (size_t i = 0; i < test.size(); i++) {
+            function[name].defaults[function[name].parameters[i + tfpdef.size() - test.size()]] = visit(test[i]);
         }
     }
     return {}; 
@@ -696,10 +701,27 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
 
             // 这里要给参数赋值
             auto &parameters = it -> second.parameters;
+            auto &defaults = it -> second.defaults;
             std::unordered_map<std::string, std::any> local;
-            for (int i = 0; i < parameters.size(); i++) {
-                local[parameters[i]] = visit(args -> argument(i) -> test(0));
+
+            // 有参数
+            int argument_size = (args == nullptr) ? 0 : args -> argument().size();
+            for (int i = 0; i < argument_size; i++) {
+                auto *argument = args -> argument(i);
+                if (argument -> ASSIGN()) { // 形参
+                    auto param_name = argument -> test(0) -> getText();
+                    local[param_name] = visit(argument -> test(1));
+                }
+                else { // 实参
+                    local[parameters[i]] = visit(argument -> test(0));
+                }
             }
+            for (auto param_name : parameters) {
+                if (local.find(param_name) == local.end()) {
+                    local[param_name] = defaults.at(param_name);
+                }
+            }
+
             scope.push(local);
             auto res = visit(suite);
             scope.pop();
