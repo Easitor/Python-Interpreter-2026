@@ -748,6 +748,9 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
                 if (temp.type() == typeid(std::string)) {
                     return int2048(std::any_cast<std::string>(temp));
                 }
+                if (temp.type() == typeid(int2048)) {
+                    return static_cast<int2048>(temp);
+                }
             }
             if (name -> getText() == "float") {
                 if (temp.type() == typeid(bool)) {
@@ -759,6 +762,9 @@ std::any EvalVisitor::visitAtom_expr(Python3Parser::Atom_exprContext *context)  
                 }
                 if (temp.type() == typeid(std::string)) {
                     return std::stod(std::any_cast<std::string>(temp));
+                }
+                if (temp.type() == typeid(double)) {
+                    return static_cast<double>(temp);
                 }
             }
             if (name -> getText() == "str") {
